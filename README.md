@@ -11,9 +11,9 @@ Replaces the shader-based version. One filter ("Rounded Crop (Crop, Round, Strok
 ## Install (Windows)
 
 1. Open the repo's **Releases** page and download `obs-rounded-crop-<version>-windows-x64-setup.exe`.
-2. Close OBS, run the installer (it finds your OBS folder automatically), then start OBS.
+2. Close OBS, run the installer, then start OBS.
 
-A plain `obs-rounded-crop-windows-x64.zip` is also attached if you prefer to unzip into `C:\Program Files\obs-studio\` manually.
+The installer puts the plugin in `C:\ProgramData\obs-studio\plugins\obs-rounded-crop`. The release also includes `obs-rounded-crop-windows-x64.zip`; to install manually, unzip its `obs-rounded-crop` folder into `C:\ProgramData\obs-studio\plugins\`.
 
 ## Build locally (Visual Studio 2022 + CMake)
 
