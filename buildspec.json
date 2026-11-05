@@ -1,4 +1,4 @@
-{
+﻿{
     "dependencies": {
         "obs-studio": {
             "version": "31.1.1",
@@ -40,6 +40,6 @@
     "displayName": "Rounded Crop",
     "version": "1.0.0",
     "author": "Bubba",
-    "website": "https://github.com/bubba/obs-rounded-crop",
+    "website": "https://github.com/bubba-ltn/obs-rounded-crop",
     "email": "bubba@lovethynerd.com"
 }
