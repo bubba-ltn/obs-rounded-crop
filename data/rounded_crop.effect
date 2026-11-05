@@ -1,0 +1,169 @@
+uniform float4x4 ViewProj;
+uniform texture2d image;
+
+uniform float2 src_size;
+uniform float2 out_size;
+uniform float2 crop_min;
+uniform float2 crop_size;
+uniform float u_pad;
+uniform float u_radius;
+uniform float u_expo;
+uniform float u_soft;
+uniform int u_shape;
+uniform int u_shadow_count;
+uniform int u_stroke_count;
+uniform float4 sh_col1;
+uniform float4 sh_geo1;
+uniform float4 st_col1;
+uniform float4 st_geo1;
+uniform float4 sh_col2;
+uniform float4 sh_geo2;
+uniform float4 st_col2;
+uniform float4 st_geo2;
+uniform float4 sh_col3;
+uniform float4 sh_geo3;
+uniform float4 st_col3;
+uniform float4 st_geo3;
+uniform float4 sh_col4;
+uniform float4 sh_geo4;
+uniform float4 st_col4;
+uniform float4 st_geo4;
+uniform float4 sh_col5;
+uniform float4 sh_geo5;
+uniform float4 st_col5;
+uniform float4 st_geo5;
+uniform float4 sh_col6;
+uniform float4 sh_geo6;
+uniform float4 st_col6;
+uniform float4 st_geo6;
+
+sampler_state textureSampler {
+	Filter    = Linear;
+	AddressU  = Clamp;
+	AddressV  = Clamp;
+};
+
+struct VertData {
+	float4 pos : POSITION;
+	float2 uv  : TEXCOORD0;
+};
+
+VertData VSDefault(VertData v_in)
+{
+	VertData vert_out;
+	vert_out.pos = mul(float4(v_in.pos.xyz, 1.0), ViewProj);
+	vert_out.uv  = v_in.uv;
+	return vert_out;
+}
+
+// Signed distance to a rounded rectangle / squircle: <0 inside, 0 on edge, >0 outside.
+// One scalar radius for both axes, in real pixels, so corners never skew.
+float ShapeDist(float2 p, float2 c, float2 h, float r, int mode, float n)
+{
+	float2 d = abs(p - c) - (h - float2(r, r));
+	float2 q = max(d, float2(0.0, 0.0));
+	float outside = length(q);
+	if (mode == 1 && r > 0.5) {
+		float rr = max(r, 0.0001);
+		outside = rr * pow(pow(q.x / rr, n) + pow(q.y / rr, n), 1.0 / n);
+	}
+	return min(max(d.x, d.y), 0.0) + outside - r;
+}
+
+// Straight-alpha "over".
+float4 Over(float4 top, float4 bot)
+{
+	float a = top.a + bot.a * (1.0 - top.a);
+	float3 rgb = float3(0.0, 0.0, 0.0);
+	if (a > 0.0001)
+		rgb = (top.rgb * top.a + bot.rgb * bot.a * (1.0 - top.a)) / a;
+	return float4(rgb, a);
+}
+
+float4 ShadowLayer(float2 p, float4 res, float4 col, float4 geo, float2 rc, float2 rh, float rad)
+{
+	if (col.a <= 0.0001)
+		return res;
+	float2 h = max(rh + float2(geo.w, geo.w), float2(0.001, 0.001));
+	float r = clamp(rad + geo.w, 0.0, min(h.x, h.y));
+	float d = ShapeDist(p, rc + geo.xy, h, r, u_shape, u_expo);
+	float a = (1.0 - smoothstep(0.0, max(geo.z, 0.001), d)) * col.a;
+	return Over(float4(col.rgb, a), res);
+}
+
+// geo.x = width, geo.y = position (0 outside, 1 center, 2 inside)
+float4 StrokeLayer(float d0, float4 res, float4 col, float4 geo)
+{
+	if (col.a <= 0.0001 || geo.x <= 0.0)
+		return res;
+	float lo = 0.0;
+	float hi = geo.x;
+	if (geo.y > 1.5) {
+		lo = -geo.x;
+		hi = 0.0;
+	} else if (geo.y > 0.5) {
+		lo = -geo.x * 0.5;
+		hi = geo.x * 0.5;
+	}
+	float s = max(u_soft, 0.001);
+	float rise = smoothstep(lo - s, lo + s, d0);
+	float fall = 1.0 - smoothstep(hi - s, hi + s, d0);
+	float m = clamp(rise * fall, 0.0, 1.0) * col.a;
+	return Over(float4(col.rgb, m), res);
+}
+
+float4 PSRoundedCrop(VertData v_in) : TARGET
+{
+	float2 p = v_in.uv * out_size;
+	float2 rh = crop_size * 0.5;
+	float2 rc = float2(u_pad, u_pad) + rh;
+	float rad = clamp(u_radius, 0.0, min(rh.x, rh.y));
+	float d0 = ShapeDist(p, rc, rh, rad, u_shape, u_expo);
+
+	float4 res = float4(0.0, 0.0, 0.0, 0.0);
+	if (u_shadow_count >= 1)
+		res = ShadowLayer(p, res, sh_col1, sh_geo1, rc, rh, rad);
+	if (u_shadow_count >= 2)
+		res = ShadowLayer(p, res, sh_col2, sh_geo2, rc, rh, rad);
+	if (u_shadow_count >= 3)
+		res = ShadowLayer(p, res, sh_col3, sh_geo3, rc, rh, rad);
+	if (u_shadow_count >= 4)
+		res = ShadowLayer(p, res, sh_col4, sh_geo4, rc, rh, rad);
+	if (u_shadow_count >= 5)
+		res = ShadowLayer(p, res, sh_col5, sh_geo5, rc, rh, rad);
+	if (u_shadow_count >= 6)
+		res = ShadowLayer(p, res, sh_col6, sh_geo6, rc, rh, rad);
+
+	// source pixel for this output pixel (1:1, never stretched)
+	float2 sp = p - float2(u_pad, u_pad) + crop_min;
+	float4 src = image.Sample(textureSampler, sp / src_size);
+	// libobs textures are premultiplied; work in straight alpha
+	src.rgb *= (src.a > 0.0) ? (1.0 / src.a) : 0.0;
+	float ca = (1.0 - smoothstep(0.0, max(u_soft, 0.001), d0)) * src.a;
+	res = Over(float4(src.rgb, ca), res);
+	if (u_stroke_count >= 1)
+		res = StrokeLayer(d0, res, st_col1, st_geo1);
+	if (u_stroke_count >= 2)
+		res = StrokeLayer(d0, res, st_col2, st_geo2);
+	if (u_stroke_count >= 3)
+		res = StrokeLayer(d0, res, st_col3, st_geo3);
+	if (u_stroke_count >= 4)
+		res = StrokeLayer(d0, res, st_col4, st_geo4);
+	if (u_stroke_count >= 5)
+		res = StrokeLayer(d0, res, st_col5, st_geo5);
+	if (u_stroke_count >= 6)
+		res = StrokeLayer(d0, res, st_col6, st_geo6);
+
+	// back to premultiplied for libobs
+	res.rgb *= res.a;
+	return res;
+}
+
+technique Draw
+{
+	pass
+	{
+		vertex_shader = VSDefault(v_in);
+		pixel_shader  = PSRoundedCrop(v_in);
+	}
+}
