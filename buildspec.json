@@ -38,7 +38,7 @@
     },
     "name": "obs-rounded-crop",
     "displayName": "Rounded Crop",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "author": "Bubba",
     "website": "https://github.com/bubba-ltn/obs-rounded-crop",
     "email": "bubba@lovethynerd.com"
